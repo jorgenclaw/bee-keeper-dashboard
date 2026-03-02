@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { detectSunsetZone, detectState, getCityFromCoords, getZoneName } from '../utils/zoneDetector'
 
 function LocationConfig({ location, onUpdate, onClose }) {
   const [formData, setFormData] = useState(location)
+  const [autoDetecting, setAutoDetecting] = useState(false)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -15,6 +17,48 @@ function LocationConfig({ location, onUpdate, onClose }) {
       ...prev,
       [name]: value
     }))
+  }
+
+  // Auto-detect zone when coordinates change
+  const handleCoordinateChange = (e) => {
+    const { name, value } = e.target
+    const numValue = parseFloat(value)
+
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [name]: numValue
+      }
+
+      // If both lat and lon are valid, auto-detect zone
+      if (updated.latitude && updated.longitude) {
+        updated.zone = detectSunsetZone(updated.latitude, updated.longitude)
+        updated.state = detectState(updated.latitude, updated.longitude)
+      }
+
+      return updated
+    })
+  }
+
+  // Auto-detect city name from coordinates
+  const handleAutoDetectCity = async () => {
+    if (!formData.latitude || !formData.longitude) {
+      alert('Please enter latitude and longitude first')
+      return
+    }
+
+    setAutoDetecting(true)
+    try {
+      const city = await getCityFromCoords(formData.latitude, formData.longitude)
+      setFormData(prev => ({
+        ...prev,
+        city: city
+      }))
+    } catch (error) {
+      console.error('Error auto-detecting city:', error)
+    } finally {
+      setAutoDetecting(false)
+    }
   }
 
   return (
@@ -35,14 +79,25 @@ function LocationConfig({ location, onUpdate, onClose }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               City
             </label>
-            <input
-              type="text"
-              name="city"
-              value={formData.city}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              required
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                required
+              />
+              <button
+                type="button"
+                onClick={handleAutoDetectCity}
+                disabled={autoDetecting}
+                className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50"
+                title="Auto-detect city from coordinates"
+              >
+                {autoDetecting ? '...' : '📍'}
+              </button>
+            </div>
           </div>
 
           <div>
@@ -61,17 +116,20 @@ function LocationConfig({ location, onUpdate, onClose }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sunset Zone
+              Sunset Zone (auto-detected)
             </label>
             <input
               type="text"
               name="zone"
               value={formData.zone}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-gray-50"
               placeholder="e.g., 9B"
               required
+              readOnly
+              title={getZoneName(formData.zone)}
             />
+            <p className="text-xs text-gray-500 mt-1">{getZoneName(formData.zone)}</p>
           </div>
 
           <div>
@@ -83,7 +141,7 @@ function LocationConfig({ location, onUpdate, onClose }) {
               step="0.0001"
               name="latitude"
               value={formData.latitude}
-              onChange={handleChange}
+              onChange={handleCoordinateChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               required
             />
@@ -98,7 +156,7 @@ function LocationConfig({ location, onUpdate, onClose }) {
               step="0.0001"
               name="longitude"
               value={formData.longitude}
-              onChange={handleChange}
+              onChange={handleCoordinateChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               required
             />
@@ -107,7 +165,7 @@ function LocationConfig({ location, onUpdate, onClose }) {
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p className="text-sm text-blue-800">
-            💡 <strong>Tip:</strong> You can find your coordinates at{' '}
+            💡 <strong>Tip:</strong> Enter your latitude and longitude (find at{' '}
             <a
               href="https://www.latlong.net/"
               target="_blank"
@@ -116,6 +174,7 @@ function LocationConfig({ location, onUpdate, onClose }) {
             >
               latlong.net
             </a>
+            ) and the Sunset Zone will be auto-detected! Click 📍 to auto-detect city name.
           </p>
         </div>
 
